@@ -4,6 +4,3 @@ __pycache__/
 *.pyc
 output/
 *.png
-/Metadata/output_scenes
-Metadata/clevr_data_images.zip
-Metadata/clevr_data_scenes.zip

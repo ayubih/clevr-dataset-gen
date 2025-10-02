@@ -1,148 +1,124 @@
-# CLEVR Dataset Generation
+# CLEVR Dataset Generator
 
-This is the code used to generate the [CLEVR dataset](http://cs.stanford.edu/people/jcjohns/clevr/) as described in the paper:
+This repository provides the cleaned-up tooling required to generate the
+synthetic CLEVR dataset: Blender scripts that render scenes plus Python utilities
+that compose question-answer pairs from the rendered metadata.
 
-**[CLEVR: A Diagnostic Dataset for Compositional Language and Elementary Visual Reasoning](http://cs.stanford.edu/people/jcjohns/clevr/)**
- <br>
- <a href='http://cs.stanford.edu/people/jcjohns/'>Justin Johnson</a>,
- <a href='http://home.bharathh.info/'>Bharath Hariharan</a>,
- <a href='https://lvdmaaten.github.io/'>Laurens van der Maaten</a>,
- <a href='http://vision.stanford.edu/feifeili/'>Fei-Fei Li</a>,
- <a href='http://larryzitnick.org/'>Larry Zitnick</a>,
- <a href='http://www.rossgirshick.info/'>Ross Girshick</a>
- <br>
- Presented at [CVPR 2017](http://cvpr2017.thecvf.com/)
+## Repository layout
+- `image_generation/` – Blender-facing code, scene assets, and camera presets.
+- `question_generation/` – Scripts and templates that expand the rendered scene
+  graphs into compositional questions.
+- `scripts/` – Helper utilities such as environment setup helpers for Blender.
+- `docs/` – Project to-dos and supplementary documentation.
 
-Code and pretrained models for the baselines used in the paper [can be found here](https://github.com/facebookresearch/clevr-iep).
+The renderer always boots from `image_generation/data/base_scene.blend`, the same
+base scene that shipped with the original CLEVR release. It defines the ground
+plane, light rig, and camera rig that every render builds upon.
 
-You can use this code to render synthetic images and compositional questions for those images, like this:
+## Quick setup
+1. Install [Blender](https://www.blender.org/) (3.x or 4.x recommended).
+2. Make sure Python 3 is available on your system for the question-generation
+   scripts.
+3. Allow Blender to import the image-generation modules by running:
+   ```bash
+   ./scripts/setup_blender.sh
+   ```
+   If Blender is not on your `$PATH`, supply the path to its bundled
+   `site-packages` directory:
+   ```bash
+   ./scripts/setup_blender.sh --site-packages /Applications/blender/Blender.app/Contents/Resources/4.0/python/lib/python3.10/site-packages
+   ```
+   The script writes a `clevr.pth` file that points Blender's Python to the
+   `image_generation` package.
 
-<div align="center">
-  <img src="images/example1080.png" width="800px">
-</div>
-
-**Q:** How many small spheres are there? <br>
-**A:** 2
-
-**Q:**  What number of cubes are small things or red metal objects? <br>
-**A:**  2
-
-**Q:** Does the metal sphere have the same color as the metal cylinder? <br>
-**A:** Yes
-
-**Q:** Are there more small cylinders than metal things? <br>
-**A:** No
-
-**Q:**  There is a cylinder that is on the right side of the large yellow object behind the blue ball; is there a shiny cube in front of it? <br>
-**A:**  Yes
-
-If you find this code useful in your research then please cite
-
-```
-@inproceedings{johnson2017clevr,
-  title={CLEVR: A Diagnostic Dataset for Compositional Language and Elementary Visual Reasoning},
-  author={Johnson, Justin and Hariharan, Bharath and van der Maaten, Laurens
-          and Fei-Fei, Li and Zitnick, C Lawrence and Girshick, Ross},
-  booktitle={CVPR},
-  year={2017}
-}
-```
-
-All code was developed and tested on OSX and Ubuntu 16.04.
-
-## Step 1: Generating Images
-First we render synthetic images using [Blender](https://www.blender.org/), outputting both rendered images as well as a JSON file containing ground-truth scene information for each image.
-
-Blender ships with its own installation of Python which is used to execute scripts that interact with Blender; you'll need to add the `image_generation` directory to Python path of Blender's bundled Python. The easiest way to do this is by adding a `.pth` file to the `site-packages` directory of Blender's Python, like this:
-
-```bash
-echo $PWD/image_generation >> $BLENDER/$VERSION/python/lib/python3.5/site-packages/clevr.pth
-```
-
-where `$BLENDER` is the directory where Blender is installed and `$VERSION` is your Blender version; for example on OSX you might run:
-
-```bash
-echo $PWD/image_generation >> /Applications/blender/blender.app/Contents/Resources/2.78/python/lib/python3.5/site-packages/clevr.pth
-```
-
-You can then render some images like this:
-
-```bash
-cd image_generation
-blender --background --python render_images.py -- --num_images 10
-```
-
-### Rendering with the modern script (Blender 3.x/4.x)
-
-For newer Blender versions we provide `render_images_modern.py`. It keeps the
-original scene generation logic while updating the Blender API usage, adding GPU
-quality-of-life flags, and letting you drive the camera from a list of explicit
-viewpoints:
-
+## Rendering pipeline
+Run the modern entry point from Blender to produce images and scene JSON:
 ```bash
 cd image_generation
 blender --background --python render_images_modern.py -- \
-  --num_images 10 \
-  --camera_viewpoints_json camera_viewpoints_example.json \
-  --use_gpu --gpu_device_type OPTIX --enable_adaptive_sampling
+  --num_images 12 \
+  --output_image_dir ../output/images \
+  --output_scene_dir ../output/scenes \
+  --output_scene_file ../output/CLEVR_scenes.json
 ```
 
-The `camera_viewpoints_example.json` file shows the expected format for
-defining camera poses. When no JSON is supplied the script falls back to the
-legacy jittered camera behaviour.
+### Camera viewpoint control and rotations
+`render_images_modern.py` accepts `--camera_viewpoints_json` describing explicit
+poses. Each entry supports:
 
-On OSX the `blender` binary is located inside the blender.app directory; for convenience you may want to
-add the following alias to your `~/.bash_profile` file:
+| Field      | Description |
+|------------|-------------|
+| `location` | XYZ coordinates of the camera in world units. Changing the vector rotates the camera around the scene (e.g. rotating the XY components sweeps around the vertical axis). |
+| `look_at`  | World-space target the camera focuses on. Alter it to tilt the camera up/down/sideways without changing its position. |
+| `up`       | Up-direction vector for the camera. Modify this to roll the camera about its viewing axis. Defaults to `(0, 0, 1)`.
 
-```bash
-alias blender='/Applications/blender/blender.app/Contents/MacOS/blender'
-```
+The helper file `image_generation/camera_viewpoints_rotations.json` contains
+pre-baked examples:
+- **`yaw_0_deg` / `yaw_90_deg`** – rotate the camera around the vertical axis by
+  adjusting the XY position while keeping the target fixed.
+- **`pitch_down_30_deg`** – raises the camera and lowers the focus point to pitch
+  downward.
+- **`roll_around_view_axis`** – uses a custom `up` vector to roll the frame.
 
-If you have an NVIDIA GPU with CUDA installed then you can use the GPU to accelerate rendering like this:
-
-```bash
-blender --background --python render_images.py -- --num_images 10 --use_gpu 1
-```
-
-With the modern script the GPU workflow is simplified and supports CUDA, OptiX,
-HIP and Metal devices:
-
+Render with these presets and sequentially cycle through the poses:
 ```bash
 blender --background --python render_images_modern.py -- \
-  --num_images 1000 --use_gpu --gpu_device_type CUDA --render_tile_size 1024
+  --num_images 4 \
+  --camera_viewpoints_json camera_viewpoints_rotations.json \
+  --camera_viewpoint_strategy sequential \
+  --render_num_samples 128 \
+  --output_image_dir ../output/rotations/images \
+  --output_scene_dir ../output/rotations/scenes \
+  --output_scene_file ../output/rotations/CLEVR_scenes.json
 ```
 
-The `--enable_adaptive_sampling` and `--cycles_denoiser` flags further speed up
-large batches of renders.
+To generate different angles, create your own JSON by rotating a base location
+vector. For example, to yaw around the vertical axis by 45° with radius `r`:
+```python
+import math
+r = 6.0
+yaw_deg = 45
+location = [r * math.cos(math.radians(yaw_deg)),
+            r * math.sin(math.radians(yaw_deg)),
+            4.5]
+```
+Store the resulting coordinates in a new viewpoint entry.
 
-After this command terminates you should have ten freshly rendered images stored in `output/images` like these:
+### GPU acceleration
+GPU rendering is optional but supported. Pass `--use_gpu` together with the
+backend you want to activate:
+```bash
+blender --background --python render_images_modern.py -- \
+  --num_images 64 \
+  --use_gpu --gpu_device_type CUDA \
+  --enable_adaptive_sampling --render_tile_size 1024
+```
+`--gpu_device_type` can be `CUDA`, `OPTIX`, `HIP`, `METAL`, or `NONE`. When the
+flag is omitted the script sticks to CPU-only rendering.
 
-<div align="center">
-  <img src="images/img1.png" width="260px">
-  <img src="images/img2.png" width="260px">
-  <img src="images/img3.png" width="260px">
-  <br>
-  <img src="images/img4.png" width="260px">
-  <img src="images/img5.png" width="260px">
-  <img src="images/img6.png" width="260px">
-</div>
+### Legacy workflow
+`render_images.py` mirrors the original CLEVR release for Blender 2.7x users and
+still supports CUDA via `--use_gpu 1`, but the modern script above is the
+recommended path.
 
-The file `output/CLEVR_scenes.json` will contain ground-truth scene information for all newly rendered images.
-
-You can find [more details about image rendering here](image_generation/README.md).
-
-## Step 2: Generating Questions
-Next we generate questions, functional programs, and answers for the rendered images generated in the previous step.
-This step takes as input the single JSON file containing all ground-truth scene information, and outputs a JSON file 
-containing questions, answers, and functional programs for the questions in a single JSON file.
-
-You can generate questions like this:
-
+## Generating questions
+After rendering, convert the combined scenes JSON into questions:
 ```bash
 cd question_generation
-python generate_questions.py
+python generate_questions.py \
+  --input_scene_file ../output/CLEVR_scenes.json \
+  --output_questions_file ../output/CLEVR_questions.json
 ```
 
-The file `output/CLEVR_questions.json` will then contain questions for the generated images.
+The templates under `question_generation/CLEVR_1.0_templates` define the core
+question set. Adjust `--templates_per_image` and `--instances_per_template` to
+tune output volume.
 
-You can [find more details about question generation here](question_generation/README.md).
+## Frequently asked points
+- **Does the renderer require CUDA?** No. CUDA/OptiX/HIP/Metal are optional
+  accelerators; CPU rendering remains supported out of the box.
+- **What controls the base environment?** All renders start from
+  `data/base_scene.blend`, which provides the ground plane, lights, and default
+  camera before any randomisation or supplied viewpoints are applied.
+
+For open tasks and future improvements see [`docs/TODO.md`](docs/TODO.md).
