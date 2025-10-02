@@ -72,6 +72,33 @@ cd image_generation
 blender --background --python render_images.py -- --num_images 10
 ```
 
+### Modern viewpoint control
+
+For workflows targeting Blender 3.x we provide an updated generator with
+explicit camera control.  It accepts either a JSON list of camera locations or
+samples viewpoints randomly from spherical coordinates.  This makes it easy to
+render consistent multi-view datasets or explore diverse perspectives:
+
+```bash
+cd image_generation
+blender --background --python render_images_viewpoints.py -- \
+  --num_images 10 \
+  --camera_viewpoints_json my_viewpoints.json
+```
+
+When no JSON file is supplied, the script will sample viewpoints uniformly
+within the ranges defined by `--camera_radius_range`, `--camera_azimuth_range`
+and `--camera_elevation_range`.  Each entry in `my_viewpoints.json` should be a
+dictionary with at least a `"location"` field and optional `"look_at"` and
+`"up"` keys, for example:
+
+```json
+[
+  {"location": [7.5, 0.0, 6.0], "look_at": [0, 0, 0]},
+  {"location": [-6.0, -6.0, 5.5], "look_at": [0, 0, 0]}
+]
+```
+
 On OSX the `blender` binary is located inside the blender.app directory; for convenience you may want to
 add the following alias to your `~/.bash_profile` file:
 
@@ -79,11 +106,25 @@ add the following alias to your `~/.bash_profile` file:
 alias blender='/Applications/blender/blender.app/Contents/MacOS/blender'
 ```
 
-If you have an NVIDIA GPU with CUDA installed then you can use the GPU to accelerate rendering like this:
+If you have a supported GPU you can accelerate rendering dramatically.  For the
+classic script use the legacy flag, while the modern script exposes explicit
+backend selection:
 
 ```bash
+# Original generator (CUDA only)
 blender --background --python render_images.py -- --num_images 10 --use_gpu 1
+
+# Modern generator with backend selection (CUDA, OPTIX, HIP, METAL)
+blender --background --python render_images_viewpoints.py -- \
+  --num_images 10 --use_gpu --gpu_backend CUDA
 ```
+
+When running on a headless machine make sure the Blender binary can see your
+GPU drivers.  The script automatically enables the Cycles backend and activates
+all available devices that match the selected backend.  To maximize throughput
+consider lowering `--render_num_samples` and tuning `--render_tile_size` to the
+sweet spot of your GPU (smaller tiles for older cards, larger tiles for modern
+architectures).
 
 After this command terminates you should have ten freshly rendered images stored in `output/images` like these:
 
