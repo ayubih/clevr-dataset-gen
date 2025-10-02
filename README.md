@@ -72,6 +72,25 @@ cd image_generation
 blender --background --python render_images.py -- --num_images 10
 ```
 
+### Rendering with the modern script (Blender 3.x/4.x)
+
+For newer Blender versions we provide `render_images_modern.py`. It keeps the
+original scene generation logic while updating the Blender API usage, adding GPU
+quality-of-life flags, and letting you drive the camera from a list of explicit
+viewpoints:
+
+```bash
+cd image_generation
+blender --background --python render_images_modern.py -- \
+  --num_images 10 \
+  --camera_viewpoints_json camera_viewpoints_example.json \
+  --use_gpu --gpu_device_type OPTIX --enable_adaptive_sampling
+```
+
+The `camera_viewpoints_example.json` file shows the expected format for
+defining camera poses. When no JSON is supplied the script falls back to the
+legacy jittered camera behaviour.
+
 On OSX the `blender` binary is located inside the blender.app directory; for convenience you may want to
 add the following alias to your `~/.bash_profile` file:
 
@@ -84,6 +103,17 @@ If you have an NVIDIA GPU with CUDA installed then you can use the GPU to accele
 ```bash
 blender --background --python render_images.py -- --num_images 10 --use_gpu 1
 ```
+
+With the modern script the GPU workflow is simplified and supports CUDA, OptiX,
+HIP and Metal devices:
+
+```bash
+blender --background --python render_images_modern.py -- \
+  --num_images 1000 --use_gpu --gpu_device_type CUDA --render_tile_size 1024
+```
+
+The `--enable_adaptive_sampling` and `--cycles_denoiser` flags further speed up
+large batches of renders.
 
 After this command terminates you should have ten freshly rendered images stored in `output/images` like these:
 
