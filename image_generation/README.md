@@ -10,6 +10,19 @@ Any arguments following the `--` will be captured by `render_images.py`.
 
 This command should be run from the `image_generation` directory, since by default the script will load resources from the `data` directory.
 
+## Modern workflow (Blender 3.x/4.x)
+
+For Blender 3.x and later use `render_images_modern.py`. It mirrors the original behaviour but updates the Blender API, adds robust GPU configuration, and lets you define explicit camera viewpoints from a JSON file:
+
+```
+blender --background --python render_images_modern.py -- \
+  --num_images 64 \
+  --camera_viewpoints_json camera_viewpoints_example.json \
+  --use_gpu --gpu_device_type OPTIX --enable_adaptive_sampling
+```
+
+When no JSON file is supplied the camera defaults to the classic jittered setup. See `camera_viewpoints_example.json` for the expected schema.
+
 When rendering on cluster machines without audio drivers installed you may need to add the `-noaudio` flag to the Blender invocation like this:
 
 ```
@@ -53,7 +66,15 @@ Each object is positioned randomly, but before actually adding the object to the
 By default images are rendered at `320x240`, but the resolution can be customized using the `--height` and `--width` flags.
 
 ### GPU Acceleration
-Rendering uses CPU by default, but if you have an NVIDIA GPU with CUDA installed then you can use the GPU to accelerate rendering by adding the flag `--use_gpu 1`. Blender also supports acceleration using OpenCL which allows the use of non-NVIDIA GPUs; however this is not currently supported by `render_images.py`.
+Rendering uses CPU by default. For the legacy script pass `--use_gpu 1` to enable CUDA. The modern script exposes richer options and works with CUDA, OptiX, HIP and Metal devices:
+
+```
+blender --background --python render_images_modern.py -- \
+  --use_gpu --gpu_device_type CUDA --render_tile_size 1024 \
+  --enable_adaptive_sampling --cycles_denoiser OPTIX
+```
+
+Use `--gpu_device_name` to pick a specific GPU when multiple devices are present.
 
 ### Rendering Quality
 You can control the quality of rendering with the `--render_num_samples` flag; using fewer samples will run more quickly but will result in grainy images. I've found that 64 samples is a good number to use for development; all released CLEVR images were rendered using 512 samples. The `--render_min_bounces` and `--render_max_bounces` control the number of bounces for transparent objects; I've found the default of 8 to work well for these options.
